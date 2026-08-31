@@ -61,3 +61,7 @@ async def send_startup_logo():
     except Exception as e:
         logger.error(f"❌ فشل إرسال شعار بدء التشغيل: {e}")
         return False
+        
+# أضف هذا في نهاية ملف Ninja.py
+async def startup():
+    await send_startup_logo()
