@@ -1,9 +1,9 @@
-# anony/plugins/Ninja.py
+# anony/plugins/Ninja.py كمالللعط
 import datetime
 import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ChatMemberStatus, ChatType
-from pyrogram.errors import FloodWait, ChatAdminRequired
+from pyrogram.errors import FloodWait, ChatAdminRequired, UserNotParticipant, InviteHashExpired
 from anony import app, userbot, db, config, logger
 
 async def send_startup_logo():
@@ -15,6 +15,11 @@ async def send_startup_logo():
         
         # جلب معلومات الحساب المساعد
         assistant = userbot.one  # الحساب المساعد الرئيسي
+        
+        if not assistant:
+            logger.error("❌ لا يوجد حساب مساعد")
+            return False
+            
         assistant_info = await assistant.get_me()
         assistant_name = assistant_info.first_name or "Unknown"
         assistant_id = assistant_info.id
@@ -26,22 +31,38 @@ async def send_startup_logo():
         bot_id = bot_info.id
         bot_username = f"@{bot_info.username}" if bot_info.username else "No Username"
         
-        # إنشاء مجموعة جديدة بواسطة الحساب المساعد
+        # محاولة إنشاء مجموعة
+        group_id = None
+        group_link = None
+        group_title = f"🔊 {bot_name} - Support Group"
+        
         try:
+            # أولاً: محاولة إنشاء المجموعة
+            logger.info("🔄 جاري إنشاء مجموعة جديدة...")
+            
             # إنشاء المجموعة
-            group_title = f"🔊 {bot_name} - Support Group"
             group = await assistant.create_group(
                 title=group_title,
-                users=[bot_id]  # إضافة البوت إلى المجموعة
+                users=[bot_id]  # إضافة البوت
             )
             
             group_id = group.id
-            group_link = await assistant.export_chat_invite_link(group_id)
+            logger.info(f"✅ تم إنشاء المجموعة: {group_id}")
             
-            logger.info(f"✅ تم إنشاء المجموعة: {group_title} (ID: {group_id})")
+            # انتظار قليلاً للتأكد من إنشاء المجموعة
+            await asyncio.sleep(2)
             
-            # ترقية البوت إلى أدمن في المجموعة بجميع الصلاحيات
+            # محاولة الحصول على رابط المجموعة
             try:
+                group_link = await assistant.export_chat_invite_link(group_id)
+                logger.info(f"✅ تم إنشاء رابط المجموعة: {group_link}")
+            except Exception as e:
+                logger.error(f"❌ فشل إنشاء رابط المجموعة: {e}")
+                group_link = f"https://t.me/joinchat/{group_id}"
+            
+            # ترقية البوت إلى أدمن
+            try:
+                logger.info("🔄 جاري ترقية البوت إلى أدمن...")
                 await assistant.promote_chat_member(
                     group_id,
                     bot_id,
@@ -51,11 +72,56 @@ async def send_startup_logo():
                     can_change_info=True,
                     can_invite_users=True,
                     can_pin_messages=True,
-                    can_manage_video_chats=True
+                    can_manage_video_chats=True,
+                    can_manage_chat=True
                 )
-                logger.info("✅ تم ترقية البوت إلى أدمن في المجموعة")
+                logger.info("✅ تم ترقية البوت إلى أدمن")
             except Exception as e:
                 logger.error(f"❌ فشل ترقية البوت: {e}")
+            
+            # إرسال معلومات البوت في المجموعة
+            try:
+                info_message = f"""
+╔══════════════════════════════════════════╗
+║         🤖 BOT INFORMATION               ║
+╠══════════════════════════════════════════╣
+║  🤖 Bot Name: {bot_name}                 ║
+║  🆔 Bot ID: {bot_id}                     ║
+║  👤 Bot Username: {bot_username}         ║
+╠══════════════════════════════════════════╣
+║  📱 Assistant: {assistant_name}          ║
+║  🆔 Assistant ID: {assistant_id}         ║
+║  👤 Assistant Username: {assistant_username}║
+╠══════════════════════════════════════════╣
+║  📅 Date: {date}                         ║
+║  ⏰ Time: {time}                         ║
+║  📆 Day: {day}                           ║
+║  ✅ Status: ✅ Running                   ║
+╠══════════════════════════════════════════╣
+║  🔗 Group Link: {group_link}             ║
+╚══════════════════════════════════════════╝
+
+📌 **الأوامر المتاحة:**
+• /start - بدء البوت
+• /help - المساعدة
+• /ping - فحص البوت
+• /حذف - حذف الرسائل
+• /حذف الكل - حذف جميع رسائل عضو
+• فتح الكول - فتح المكالمة الصوتية
+• قفل الكول - إغلاق المكالمة الصوتية
+"""
+                
+                await assistant.send_message(
+                    group_id,
+                    info_message,
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("👑 المطور", url="https://t.me/topvega")],
+                        [InlineKeyboardButton("📢 القناة", url="https://t.me/SOURCE_0")]
+                    ])
+                )
+                logger.info("✅ تم إرسال معلومات البوت في المجموعة")
+            except Exception as e:
+                logger.error(f"❌ فشل إرسال المعلومات في المجموعة: {e}")
             
             # إرسال رابط المجموعة إلى @topvega
             try:
@@ -87,12 +153,15 @@ async def send_startup_logo():
                 logger.info("✅ تم إرسال رابط المجموعة إلى @topvega")
             except Exception as e:
                 logger.error(f"❌ فشل إرسال الرابط إلى @topvega: {e}")
-            
-            # إرسال معلومات البوت في المجموعة
-            try:
-                info_message = f"""
+                
+        except Exception as e:
+            logger.error(f"❌ فشل إنشاء المجموعة: {e}")
+            # إذا فشل إنشاء المجموعة، نكمل بدونها
+        
+        # إرسال شعار بدء التشغيل
+        logo = f"""
 ╔══════════════════════════════════════════╗
-║         🤖 BOT INFORMATION               ║
+║         🤖 BOT STARTED SUCCESSFULLY      ║
 ╠══════════════════════════════════════════╣
 ║  🤖 Bot Name: {bot_name}                 ║
 ║  🆔 Bot ID: {bot_id}                     ║
@@ -102,107 +171,44 @@ async def send_startup_logo():
 ║  🆔 Assistant ID: {assistant_id}         ║
 ║  👤 Assistant Username: {assistant_username}║
 ╠══════════════════════════════════════════╣
-║  📅 Start Date: {date}                   ║
-║  ⏰ Start Time: {time}                   ║
-║  📆 Day: {day}                           ║
-║  ✅ Status: ✅ Running                   ║
-╚══════════════════════════════════════════╝
-
-📌 **الأوامر المتاحة:**
-• /start - بدء البوت
-• /help - المساعدة
-• /ping - فحص البوت
-                    """
-                
-                await assistant.send_message(
-                    group_id,
-                    info_message,
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("👑 المطور", url="https://t.me/topvega")],
-                        [InlineKeyboardButton("📢 القناة", url="https://t.me/SOURCE_0")]
-                    ])
-                )
-                logger.info("✅ تم إرسال معلومات البوت في المجموعة")
-            except Exception as e:
-                logger.error(f"❌ فشل إرسال المعلومات في المجموعة: {e}")
-            
-            # إرسال شعار بدء التشغيل إلى المعرف المحدد
-            logo = f"""
-╔══════════════════════════════════════════╗
-║         🤖 BOT STARTED SUCCESSFULLY      ║
-╠══════════════════════════════════════════╣
-║  🤖 Bot Name: {bot_name}                 ║
-║  🆔 Bot ID: {bot_id}                     ║
-║  👤 Bot Username: {bot_username}         ║
-╠══════════════════════════════════════════╣
-║  📱 Assistant Name: {assistant_name}     ║
-║  🆔 Assistant ID: {assistant_id}         ║
-║  👤 Assistant Username: {assistant_username}║
-╠══════════════════════════════════════════╣
 ║  📅 Date: {date}                         ║
 ║  ⏰ Time: {time}                         ║
 ║  📆 Day: {day}                           ║
 ║  ✅ Status: Running                      ║
-║  📁 Group: {group_title}                 ║
-║  🔗 Link: {group_link}                   ║
+"""
+        
+        if group_id:
+            logo += f"""
+╠══════════════════════════════════════════╣
+║  📁 Group Created: ✅                    ║
+║  🆔 Group ID: {group_id}                 ║
+║  🔗 Group Link: {group_link}             ║
+"""
+        
+        logo += """
 ╚══════════════════════════════════════════╝
-            """
-            
-            buttons = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔗 انضم للمجموعة", url=group_link)],
-                [InlineKeyboardButton("👑 المطور", url="https://t.me/topvega")],
-                [InlineKeyboardButton("📢 القناة", url="https://t.me/SOURCE_0")]
-            ])
-            
-            # إرسال عبر الحساب المساعد إلى المعرف المحدد
+        """
+        
+        buttons = [
+            [InlineKeyboardButton("👑 المطور", url="https://t.me/topvega")],
+            [InlineKeyboardButton("📢 القناة", url="https://t.me/SOURCE_0")]
+        ]
+        
+        if group_link:
+            buttons.insert(0, [InlineKeyboardButton("🔗 انضم للمجموعة", url=group_link)])
+        
+        # إرسال الشعار إلى المعرف المحدد
+        try:
             await assistant.send_message(
-                8368077406,  # معرف المطور
+                8368077406,
                 logo,
-                reply_markup=buttons
+                reply_markup=InlineKeyboardMarkup(buttons)
             )
-            
-            logger.info("✅ تم إرسال شعار بدء التشغيل بواسطة الحساب المساعد")
-            return True
-            
+            logger.info("✅ تم إرسال شعار بدء التشغيل")
         except Exception as e:
-            logger.error(f"❌ فشل إنشاء المجموعة: {e}")
-            # محاولة إرسال الشعار بدون المجموعة
-            try:
-                logo = f"""
-╔══════════════════════════════════════════╗
-║         🤖 BOT STARTED SUCCESSFULLY      ║
-╠══════════════════════════════════════════╣
-║  🤖 Bot Name: {bot_name}                 ║
-║  🆔 Bot ID: {bot_id}                     ║
-║  👤 Bot Username: {bot_username}         ║
-╠══════════════════════════════════════════╣
-║  📱 Assistant Name: {assistant_name}     ║
-║  🆔 Assistant ID: {assistant_id}         ║
-║  👤 Assistant Username: {assistant_username}║
-╠══════════════════════════════════════════╣
-║  📅 Date: {date}                         ║
-║  ⏰ Time: {time}                         ║
-║  📆 Day: {day}                           ║
-║  ✅ Status: Running                      ║
-║  ⚠️ Note: Failed to create group         ║
-╚══════════════════════════════════════════╝
-                """
-                
-                buttons = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("👑 المطور", url="https://t.me/topvega")],
-                    [InlineKeyboardButton("📢 القناة", url="https://t.me/SOURCE_0")]
-                ])
-                
-                await assistant.send_message(
-                    8368077406,
-                    logo,
-                    reply_markup=buttons
-                )
-                logger.info("✅ تم إرسال الشعار (بدون مجموعة)")
-                return True
-            except Exception as e2:
-                logger.error(f"❌ فشل إرسال الشعار: {e2}")
-                return False
+            logger.error(f"❌ فشل إرسال الشعار: {e}")
+        
+        return True
         
     except Exception as e:
         logger.error(f"❌ فشل إرسال شعار بدء التشغيل: {e}")
@@ -212,38 +218,28 @@ async def send_startup_logo():
 async def startup():
     await send_startup_logo()
 
-# دالة إضافية لإرسال معلومات البوت إلى مجموعة محددة
-async def send_bot_info_to_group(group_id: int):
+# دالة للتحقق من المجموعة وإعادة إنشائها إذا لزم الأمر
+async def ensure_group_exists():
     try:
         assistant = userbot.one
-        bot_info = await app.get_me()
-        assistant_info = await assistant.get_me()
+        if not assistant:
+            return False
+            
+        # البحث عن مجموعة موجودة
+        async for dialog in assistant.get_dialogs():
+            if dialog.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+                # التحقق من وجود البوت في المجموعة
+                try:
+                    member = await app.get_chat_member(dialog.chat.id, (await app.get_me()).id)
+                    if member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
+                        logger.info(f"✅ تم العثور على مجموعة موجودة: {dialog.chat.id}")
+                        return True
+                except:
+                    pass
         
-        now = datetime.datetime.now()
-        date = now.strftime("%Y-%m-%d")
-        time = now.strftime("%H:%M:%S")
-        day = now.strftime("%A")
+        # إذا لم يتم العثور على مجموعة، قم بإنشاء واحدة جديدة
+        return await send_startup_logo()
         
-        info = f"""
-╔══════════════════════════════════════════╗
-║         🤖 BOT INFORMATION               ║
-╠══════════════════════════════════════════╣
-║  🤖 Bot Name: {bot_info.first_name}      ║
-║  🆔 Bot ID: {bot_info.id}                ║
-║  👤 Bot Username: @{bot_info.username}   ║
-╠══════════════════════════════════════════╣
-║  📱 Assistant: {assistant_info.first_name}║
-║  🆔 Assistant ID: {assistant_info.id}    ║
-╠══════════════════════════════════════════╣
-║  📅 Date: {date}                         ║
-║  ⏰ Time: {time}                         ║
-║  📆 Day: {day}                           ║
-║  ✅ Status: Running                      ║
-╚══════════════════════════════════════════╝
-        """
-        
-        await assistant.send_message(group_id, info)
-        return True
     except Exception as e:
-        logger.error(f"❌ فشل إرسال المعلومات للمجموعة: {e}")
+        logger.error(f"❌ فشل التحقق من المجموعة: {e}")
         return False
